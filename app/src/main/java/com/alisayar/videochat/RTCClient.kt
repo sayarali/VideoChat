@@ -1,11 +1,8 @@
 package com.alisayar.videochat
 
 import android.app.Application
-import org.webrtc.DefaultVideoDecoderFactory
-import org.webrtc.DefaultVideoEncoderFactory
-import org.webrtc.EglBase
-import org.webrtc.PeerConnection
-import org.webrtc.PeerConnectionFactory
+import android.view.SurfaceView
+import org.webrtc.*
 
 class RTCClient(
     private val application: Application,
@@ -26,6 +23,13 @@ class RTCClient(
 
     private val peerConnection by lazy {
         createPeerConnection(observer)
+    }
+
+    private val localVideoSource by lazy {
+        peerConnectionFactory.createVideoSource(false)
+    }
+    private val localAudioSource by lazy {
+        peerConnectionFactory.createAudioSource(MediaConstraints())
     }
 
     init {
@@ -58,6 +62,42 @@ class RTCClient(
 
     private fun createPeerConnection(observer: PeerConnection.Observer): PeerConnection? {
         return peerConnectionFactory.createPeerConnection(iceServer, observer)
+    }
+
+
+    fun initializeSurfaceView(surface: SurfaceViewRenderer){
+        surface.run {
+            setEnableHardwareScaler(true)
+            setMirror(true)
+            init(eglContext.eglBaseContext, null)
+        }
+    }
+
+    fun startLocalVideo(surface: SurfaceViewRenderer){
+        val surfaceTextureHelper = SurfaceTextureHelper
+            .create(Thread.currentThread().name, eglContext.eglBaseContext)
+        val videoCapturer = getVideoCapturer(application)
+        videoCapturer.initialize(surfaceTextureHelper, surface.context, localVideoSource.capturerObserver)
+        videoCapturer.startCapture(320, 240, 30)
+        val localVideoTrack = peerConnectionFactory.createVideoTrack("local_track", localVideoSource)
+        localVideoTrack.addSink(surface)
+        val localAudioTrack = peerConnectionFactory.createAudioTrack("local_audio_track", localAudioSource)
+        val localStream = peerConnectionFactory.createLocalMediaStream("local_stream")
+        localStream.addTrack(localVideoTrack)
+        localStream.addTrack(localAudioTrack)
+
+
+        peerConnection?.addStream(localStream)
+    }
+
+    private fun getVideoCapturer(application: Application): VideoCapturer {
+        return Camera2Enumerator(application).run {
+            deviceNames.find {
+                isFrontFacing(it)
+            }?.let {
+                createCapturer(it, null)
+            } ?: throw java.lang.IllegalStateException()
+        }
     }
 
 }
