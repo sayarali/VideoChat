@@ -27,7 +27,7 @@ class SocketRepository(private val messageInterface: NewMessageInterface) {
                     name = username,
                     target = null,
                     data = null
-                )
+                    )
                 )
             }
 
